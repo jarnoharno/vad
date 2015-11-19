@@ -1,0 +1,1 @@
+vad-eval signals.txt noise.txt snr.txt 8000 tmppath results.txt 
