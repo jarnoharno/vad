@@ -2,6 +2,7 @@ import csv
 from subprocess import call
 import librosa
 import numpy as np
+import math
 try:
     try:
         import scikits.audiolab as al
@@ -41,16 +42,29 @@ def combine(signal_list, noise_list, snrlist, target_rate=8000):
             noise, nrate = read_soundfile(noise_file)
             if nrate != target_rate:
                 noise = librosa.core.resample(noise, nrate, target_rate)
-            noise = rms_normalize(noise)
-            noisy_signal = signal*snrdb2ratio(signal))+noise
+            if len(noise) < len(signal):
+                noise = noise_tilify(noise)
+                noise = rms_normalize(noise)
+                noise = np.tile(noise, int(math.ceil(len(signal)/len(noise))))
+            else:
+                noise = rms_normalize(noise)
+            noisy_signal = signal*snrdb2ratio(signal)+noise
             new_name = signal_file+"_"+noise_file
+            soundfile = al.Sndfile(new_name, 'r', 'flac', 1, target_rate)
+            soundfile.write_frames(noisy_signal)
+            soundfile.sync()
             print("NOISE RMS:", noise_rms)
 
 def noise_tilify(noise, rate, sfade):
     l = len(noise)/2
     head = noise[:l]
     tail = noise[l+1:]
-    fade = min(l, rate+sfade)
+    fade = min(l, rate*sfade)
+    outgain = np.sin(math.pi*np.arange(0,1,1.0/fade))
+    ingain = np.cos(math.pi*np.arange(0,1,1.0/fade))
+    fadeout = head[:fade]*outgain
+    fadein = tail[-fade:]*ingain
+    return np.concatenate((tail[:fade], fadeout+fadein, head[fade+1:]))
 
 def rms_normalize(signal):
     return signal/rms(signal)
