@@ -70,6 +70,34 @@ def g279(combined_files, prediction_dir):
 def txt2list(path):
     pass
 
+def load_truths(paths=None):
+    """ Returns combined truth values in a dictionary
+    For example:
+    {"s":[[voice-starttime, endtime],...],
+     "g":[[voice-starttime, endtime],...]}"""
+    if paths == None:
+        paths = ['s/si.txt', 's/sj.txt', 'g/gi.txt', 'g/gj.txt']
+    data = {}
+    for fn in paths:
+        segments = ad.read_segment_file(fn)
+        identity = fn[2:4]
+        scenario = identity[0]
+        if scenario not in data: data[scenario] = {}
+        data[scenario][identity] = segments
+    for scene_id, scenario in data.iteritems():
+        combined = []
+        for segments in scenario.values():
+            combined = combined+segments
+        combined = sorted(combined)
+        scenario['combined'] = combined
+    return data
+
+def segments_to_indexes(segments):
+    indexes = []
+    for s in segments:
+        indexes.append([s[0], "start"])
+        indexes.append([s[1], "end"])
+    return sorted(indexes)
 
 #if __name__ == "__main__":
 #    if len(argv == n):
