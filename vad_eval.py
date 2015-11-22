@@ -2,6 +2,9 @@ import csv
 from subprocess import call
 import librosa
 import numpy as np
+import math
+import speech_processing as sp
+
 try:
     try:
         import scikits.audiolab as al
@@ -29,40 +32,7 @@ def main(signalcsv, noisecsv, snrcsv, algorithmscsv, samplerate, tmppath, result
     except ValueError:
         print("Failed reading SNR definitions as float-values")
     algorithms = readcsv(algorithmcsv, True)
-    combine(signal_list, noise_list, snrlist)
-
-def combine(signal_list, noise_list, snrlist, target_rate=8000):
-    for signal_file in signal_list:
-        signal, srate = read_soundfile(signal_file)
-        if srate != target_rate:
-            signal = librosa.core.resample(signal, srate, target_rate)
-        signal = rms_normalize(signal)
-        for noise_file in noise_list:
-            noise, nrate = read_soundfile(noise_file)
-            if nrate != target_rate:
-                noise = librosa.core.resample(noise, nrate, target_rate)
-            noise = rms_normalize(noise)
-            noisy_signal = signal*snrdb2ratio(signal))+noise
-            new_name = signal_file+"_"+noise_file
-            print("NOISE RMS:", noise_rms)
-
-def noise_tilify(noise, rate, sfade):
-    l = len(noise)/2
-    head = noise[:l]
-    tail = noise[l+1:]
-    fade = min(l, rate+sfade)
-
-def rms_normalize(signal):
-    return signal/rms(signal)
-
-def snrdb2ratio(db, signal, noise):
-    return 10**(db/10)*rms(signal)/rms(noise)
-
-def rms(signal):
-    return np.sqrt(np.mean(np.square(signal)))
-
-def peak(signal):
-    return np.max(np.abs(signal))
+    combine(signal_list, noise_list, snrlist, soundpath)
 
 def read_soundfile(filename):
         soundfile = al.Sndfile(filename, 'r')
