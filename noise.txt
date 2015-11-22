@@ -1,0 +1,15 @@
+data/babble.flac
+data/buccaneer1.flac
+data/buccaneer2.flac
+data/destroyerengine.flac
+data/destroyerops.flac
+data/f16.flac
+data/factory1.flac
+data/factory2.flac
+data/hfchannel.flac
+data/leopard.flac
+data/m109.flac
+data/machinegun.flac
+data/pink.flac
+data/volvo.flac
+data/white.flac
