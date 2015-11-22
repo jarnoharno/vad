@@ -14,7 +14,7 @@ except ImportError:
     print("Warning: scikits.audiolab not found! Using scipy.io.wavfile")
     from scipy.io import wavfile
 
-def combine(signal_list, noise_list, snrlist, soundpath="tmp", target_rate=8000):
+def combine(signal_list, noise_list, snrlist, soundpath="tmp", target_rate=8000, overwrite=True):
     for signal_file in signal_list:
         signal, srate = read_soundfile(signal_file)
         if srate != target_rate:
@@ -36,16 +36,20 @@ def combine(signal_list, noise_list, snrlist, soundpath="tmp", target_rate=8000)
                 noise = rms_normalize(noise)[:len(signal)]
             print("Opened ", noise_file)
             for snr in snrlist:
-                print("Combining with SNR", snr)
-                noisy_signal = signal*snrdb2ratio(snr, signal, noise)+noise
-                noisy_signal = noisy_signal/peak(noisy_signal)
                 signal_name = os.path.basename(os.path.splitext(signal_file)[0])
                 noise_name = os.path.basename(os.path.splitext(noise_file)[0])
                 new_name = soundpath+"/"+signal_name+"_"+noise_name+"_"+str(snr)+".flac"
-                soundfile = al.Sndfile(new_name, 'w', al.Format('flac'), 1, target_rate)
-                soundfile.write_frames(noisy_signal)
-                soundfile.sync()
-                print("Wrote", new_name)
+                print(new_name)
+                if overwrite or os.path.exists(new_name) == False:
+                    print("Combining with SNR", snr)
+                    noisy_signal = signal*snrdb2ratio(snr, signal, noise)+noise
+                    noisy_signal = noisy_signal/peak(noisy_signal)
+                    soundfile = al.Sndfile(new_name, 'w', al.Format('flac'), 1, target_rate)
+                    soundfile.write_frames(noisy_signal)
+                    soundfile.sync()
+                    print("Wrote", new_name)
+                else:
+                    print(new_name+" exists, skipping")
 
 def tilify_signal(signal, rate, sfade):
     l = len(signal)/2
