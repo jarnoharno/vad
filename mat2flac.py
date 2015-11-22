@@ -18,6 +18,8 @@ def run(sample_rate, in_file, out_file):
     else:
         print 'unsupported data type'
         sys.exit(1)
+    print(data.flags)
+    data = data.copy(order='C')
     sound = AudioSegment(data, metadata={
         'channels': 1,
         'sample_width': 2,

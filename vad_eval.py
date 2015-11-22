@@ -48,7 +48,7 @@ def readcsv(filename, has_lists=False, delimiter=" "):
     with open(filename, 'rb') as csvfile:
         reader = csv.reader(csvfile, delimiter=delimiter)
         for row in reader:
-            if has_lists:
+            if has_lists == False:
                 res.append(row[0])
             else:
                 res.append(row)
