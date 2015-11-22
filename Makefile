@@ -48,9 +48,12 @@ ceesr-data := \
 	sj.flac \
 	sj.txt
 
+ceesr-data-merged := g.txt s.txt
+
 ceesr-data-url := http://universe.hiit.fi/data/ceesr/
 
 ceesr-data-files := $(addprefix $(data-dir)/,$(ceesr-data))
+ceesr-data-merged-files := $(addprefix $(data-dir)/,$(ceesr-data-merged))
 
 noisex-92-samplerate := 19980
 
@@ -77,10 +80,13 @@ noisex-92-data-files := $(addprefix $(data-dir)/,$(noisex-92-data))
 noisex-92-flac-files := $(addsuffix .flac,$(basename $(noisex-92-data-files)))
 
 .PHONY: all
-all: $(ceesr-data-files) $(noisex-92-flac-files)
+all: $(ceesr-data-files) $(ceesr-data-merged-files) $(noisex-92-flac-files)
 
 $(ceesr-data-files): $(data-dir)/%: | $(data-dir)
 	curl -u ceesr:ceesr -o $@ $(ceesr-data-url)$(notdir $@)
+
+$(ceesr-data-merged-files): %.txt: %i.txt %j.txt
+	$(python) mergelabels.py $^ > $@
 
 $(noisex-92-data-files): $(data-dir)/%: | $(data-dir)
 	curl -o $@ $(noisex-92-data-url)$(notdir $@)
