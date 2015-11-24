@@ -3,7 +3,7 @@ from subprocess import call
 import librosa
 import numpy as np
 import math
-import speech_processing as sp
+import speech_processing as speech
 
 try:
     try:
@@ -32,7 +32,12 @@ def main(signalcsv, noisecsv, snrcsv, algorithmscsv, samplerate, tmppath, result
     except ValueError:
         print("Failed reading SNR definitions as float-values")
     algorithms = readcsv(algorithmcsv, True)
-    combine(signal_list, noise_list, snrlist, soundpath)
+    speech.combine(signal_list, noise_list, snrlist, tmppath)
+    call_vads(algorithmcsv, tmppath, resultpath)
+
+def call_vads(algorithms, audiopath, resultpath):
+    for instruction in algorithms:
+        subprocess.call(" ".join(instruction+[audiopath]+[resultpath]))
 
 def read_soundfile(filename):
         soundfile = al.Sndfile(filename, 'r')
@@ -70,6 +75,16 @@ def g279(combined_files, prediction_dir):
 def txt2list(path):
     pass
 
+def read_segment_file(path):
+    with open(path) as sf:
+        segments = []
+        for l in sf.readlines():
+            l = l.split('\t')
+            segments.append([float(l[0]), float(l[1])])
+        return segments
+    print("Failed reading"+path)
+    return None
+
 def load_truths(paths=None):
     """ Returns combined truth values in a dictionary
     For example:
@@ -79,7 +94,7 @@ def load_truths(paths=None):
         paths = ['s/si.txt', 's/sj.txt', 'g/gi.txt', 'g/gj.txt']
     data = {}
     for fn in paths:
-        segments = ad.read_segment_file(fn)
+        segments = read_segment_file(fn)
         identity = fn[2:4]
         scenario = identity[0]
         if scenario not in data: data[scenario] = {}
@@ -98,6 +113,20 @@ def segments_to_indexes(segments):
         indexes.append([s[0], "start"])
         indexes.append([s[1], "end"])
     return sorted(indexes)
+
+def plot_segments(truth, prediction, ax=None):
+    if ax == None:
+        p = plt
+    else:
+        p = ax
+    for segment in prediction:
+        p.axvspan(segment[0], segment[1], facecolor='orange', alpha=0.25, linestyle='dashed')
+    for segment in truth:
+        :.axvspan(segment[0], segment[1], facecolor='cyan', alpha=0.25)
+
+#create linear values for x-axis
+def xspace(samples, frame_len, samplerate):
+    return np.linspace(0,samples*frame_len/samplerate, samples)
 
 #if __name__ == "__main__":
 #    if len(argv == n):
