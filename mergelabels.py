@@ -1,16 +1,23 @@
-import numpy as np
 import itertools as it
 
+def readseq(path):
+    with open(path, 'r') as f:
+        return [float(line) for line in f]
+
 def mergefiles(files):
-    # load flattened sequences
-    lists = [np.loadtxt(file)[:,0:2].flatten().tolist() for file in files]
+    lists = [readseq(f) for f in files]
     return mergelists(lists)
 
-# calling with sublists having an odd number of elements results in undefined
-# behaviour
+# calling with sublists having and even number of elements is undefined
 def mergelists(lists):
+    # get the longest sequence
+    t = max([l[-1] for l in lists])
+    # prune last timestamps
+    lists = [l[0:-1] for l in lists]
     # concatenate lists
     x = [y for l in lists for y in l]
+    # append last timestamp
+    x.append(t)
     # rearrange into tuples marking beginning and end of an event
     x = sorted(it.izip(x,it.cycle([1,-1])))
     # merge by removing redundant elements
