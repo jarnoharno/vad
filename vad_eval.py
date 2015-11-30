@@ -122,7 +122,7 @@ def plot_segments(truth, prediction, ax=None):
     for segment in prediction:
         p.axvspan(segment[0], segment[1], facecolor='orange', alpha=0.25, linestyle='dashed')
     for segment in truth:
-        :.axvspan(segment[0], segment[1], facecolor='cyan', alpha=0.25)
+        p.axvspan(segment[0], segment[1], facecolor='cyan', alpha=0.25)
 
 #create linear values for x-axis
 def xspace(samples, frame_len, samplerate):

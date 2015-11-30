@@ -4,6 +4,7 @@ import librosa
 import numpy as np
 import math
 import os
+
 try:
     try:
         import scikits.audiolab as al
@@ -15,7 +16,7 @@ except ImportError:
     from scipy.io import wavfile
 
 def combine(signal_list, noise_list, snrlist, soundpath="tmp", target_rate=8000, overwrite=True):
-    for signal_file in signal_list:
+    for signal_file, labelfile in signal_list:
         signal, srate = read_soundfile(signal_file)
         if srate != target_rate:
             signal = librosa.core.resample(signal, srate, target_rate)

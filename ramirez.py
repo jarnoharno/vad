@@ -22,21 +22,21 @@ import speech_processing as sp
 import math
 
 class Ramirez:
-    def __init__(NFFT, fs, Nw, Nsh, n, M):
+    def __init__(NFFT, fs, Nw, Nsh, n, M, K=3):
         self.NFFT = NFFT
         self.fs = fs
         self.Nw = Nw
         self.Nsh = Nsh
         self.win = signal.hamming(Nw)
+        self.K = K
+        self.alpha = 0.95
         n = sigutil.framesig(n, Nw, Nsh, self.win)
         N = np.apply_along_axis(sp.spect_power, 1, n, fs, NFFT)
-        self.N = np.mean(N, 0) # Mean noise spectrum.
-        energy = np.sum(n**2, 0)
+        self.N = np.mean(N[:K*2], 1) # Initial mean noise spectrum.
+        energy = np.sum(n[:K*2]**2, 0)
         self.E0 = min(energy)
         self.E1 = max(energy)
         self.M = M
-        self.K = 3
-        self.alpha = 0.95
 
     def ltsd(self, s):
         x = sigutil.framesig(s, self.Nw, self.Nsh, self.win)
