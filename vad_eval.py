@@ -1,9 +1,14 @@
+import os
 import csv
 from subprocess import call
 import librosa
 import numpy as np
 import math
 import speech_processing as speech
+import sys
+import subprocess
+import mergelabels
+from tempfile import NamedTemporaryFile
 
 try:
     try:
@@ -15,7 +20,7 @@ except ImportError:
     print("Warning: scikits.audiolab not found! Using scipy.io.wavfile")
     from scipy.io import wavfile
 
-def main(signalcsv, noisecsv, snrcsv, algorithmscsv, samplerate, tmppath, resultcsv):
+def preprocess(signalcsv="signals.txt", noisecsv="noise.txt", snrcsv="snr.txt", algocsv="algo.txt", tmppath="tmp/", resultpath="res/"):
     """
     combine signals and noises with all SNRs and write audio output to tmppath
     with given samplerate
@@ -31,13 +36,70 @@ def main(signalcsv, noisecsv, snrcsv, algorithmscsv, samplerate, tmppath, result
         snrlist = [float(x) for x in snrlist]
     except ValueError:
         print("Failed reading SNR definitions as float-values")
-    algorithms = readcsv(algorithmcsv, True)
     speech.combine(signal_list, noise_list, snrlist, tmppath)
-    call_vads(algorithmcsv, tmppath, resultpath)
+    #call_vads(algorithms, tmppath, resultpath)
+    #calculate_metrics(resultpath)
 
-def call_vads(algorithms, audiopath, resultpath):
+def evaluation(resultpath="res/", metricspath="eval/"):
+    tr = load_truths()
+    all_metrics(tr, resultpath, metricspath)
+
+def compute_all_metrics(truths, resultpath, metricspath):
+    for fn in os.listdir(resultpath):
+        split1 = os.path.splitext(fn)
+        if split1[1]==".txt":
+            identifier = split1[0]
+            ids = identifier.split("_")
+            if ids[1][0] in truths:
+                #Only evaluate against combined labels for now
+                compute_metrics(identifier, truths[ids[1][0]]["combined"], resultpath+fn, metricspath)
+
+def compute_metrics(id, truths, predictions, metricspath):
+    tr_fname = ""
+    with NamedTemporaryFile('w') as tr, open(metricspath+"/"+id+"_metrics.txt", "w") as metricf:
+        np.savetxt(tr, mergelabels.mergelists(truths), delimiter="\n")
+        tr_fname = tr.name
+        nullf = open(os.devnull, 'w')
+        call(["julia", "metric/metric.jl", id, tr_fname, predictions], stdout=metricf, stderr=nullf)
+        tr.close
+
+def read_metrics(metricfn):
+    data = readcsv(metricfn, True)
+    if len(data) > 0:
+        print(metricfn)
+        print(data)
+        m = {}
+        id = data[0][0]
+        info = id.split("_")
+        {"algo":info[0], "signal":info[1], "noise":info[2],
+            "snr":float(info[3])}
+        for row in data:
+            m[row[1]] = float(row[2])
+        if not "FP" in m:
+            m["FP"] = m["I"]+m["M"]+m["OS"]+m["OE"]
+        if not "FN" in m:
+            m["FN"] = m["D"]+m["F"]+m["US"]+m["UE"]
+        acc = (m["TP"]+m["TN"])/(m["TP"]+m["TN"]+m["FP"]+m["FN"])
+        recall = m["TP"]/(m["TP"]+m["FN"])
+        return id, {"algo":info[0], "signal":info[1], "noise":info[2],
+            "snr":float(info[3]), "metrics":m, "ACC":acc, "TPR":recall}
+    return None
+
+def summarize(metricspath="eval/"):
+    metrics = {}
+    for fn in os.listdir(metricspath):
+        if os.path.splitext(fn)[1] == ".txt":
+            res = read_metrics(metricspath+fn)
+            if res != None:
+                id, m = res
+                metrics[id] = m
+    return metrics
+
+def call_vads(algocsv, audiopath, resultpath):
+    algorithms = readcsv(algocsv, True)
     for instruction in algorithms:
-        subprocess.call(" ".join(instruction+[audiopath]+[resultpath]))
+        print(instruction+[audiopath]+[resultpath])
+        subprocess.call(instruction+[audiopath]+[resultpath])
 
 def read_soundfile(filename):
         soundfile = al.Sndfile(filename, 'r')
@@ -91,11 +153,11 @@ def load_truths(paths=None):
     {"s":[[voice-starttime, endtime],...],
      "g":[[voice-starttime, endtime],...]}"""
     if paths == None:
-        paths = ['s/si.txt', 's/sj.txt', 'g/gi.txt', 'g/gj.txt']
+        paths = ['data/si.txt', 'data/sj.txt', 'data/gi.txt', 'data/gj.txt']
     data = {}
     for fn in paths:
         segments = read_segment_file(fn)
-        identity = fn[2:4]
+        identity = os.path.splitext(os.path.basename(fn))[0]
         scenario = identity[0]
         if scenario not in data: data[scenario] = {}
         data[scenario][identity] = segments
@@ -128,6 +190,11 @@ def plot_segments(truth, prediction, ax=None):
 def xspace(samples, frame_len, samplerate):
     return np.linspace(0,samples*frame_len/samplerate, samples)
 
-#if __name__ == "__main__":
-#    if len(argv == n):
-#        main(argv*)
+if __name__ == "__main__":
+    instructions = set('preprocess', 'vad', 'evaluation')
+    if len(sys.argv) == 1:
+        main()
+    elif len(sys.argv)==7:
+        main(*sys.argv)
+    else:
+        print("Wrong amount of arguments. ("+str(len(argv))+")")

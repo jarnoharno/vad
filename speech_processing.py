@@ -15,7 +15,7 @@ except ImportError:
     print("Warning: scikits.audiolab not found! Using scipy.io.wavfile")
     from scipy.io import wavfile
 
-def combine(signal_list, noise_list, snrlist, soundpath="tmp", target_rate=8000, overwrite=True):
+def combine(signal_list, noise_list, snrlist, soundpath="tmp", target_rate=8000, overwrite=False):
     for signal_file, labelfile in signal_list:
         signal, srate = read_soundfile(signal_file)
         if srate != target_rate:
