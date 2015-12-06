@@ -4,6 +4,9 @@ import librosa
 import numpy as np
 import math
 import os
+import soundfile
+import vad_eval as vad
+import random
 
 try:
     try:
@@ -52,6 +55,19 @@ def combine(signal_list, noise_list, snrlist, soundpath="tmp", target_rate=8000,
                 else:
                     print(new_name+" exists, skipping")
 
+def add_noise(signal, noisefile, snr=10):
+    noise,nrate = read_soundfile(noisefile)
+    noise = np.roll(noise, random.randint(0,len(noise)))
+    if len(noise) < len(signal):
+        noise = tilify_signal(noise, nrate, 0.5)
+        noise = rms_normalize(noise)
+        noise = np.tile(noise, int(math.ceil(float(len(signal))/len(noise))))[:len(signal)]
+    else:
+        noise = rms_normalize(noise)[:len(signal)]
+    noisy_signal = signal*snrdb2ratio(snr, signal, noise)+noise
+    noisy_signal = noisy_signal/peak(noisy_signal)
+    return noisy_signal
+
 def tilify_signal(signal, rate, sfade):
     l = len(signal)/2
     head = signal[:l]
@@ -64,6 +80,22 @@ def tilify_signal(signal, rate, sfade):
     fadeout = head[:fade]*outgain
     fadein = tail[-fade:]*ingain
     return np.concatenate((tail[:fade], fadeout+fadein, head[fade+1:]))
+
+#Used in noise approximation algorithms
+def resample_and_normalize_file(source, target, new_rate):
+    signal, srate = read_soundfile(source)
+    if srate != new_rate:
+        signal = librosa.core.resample(signal, srate, new_rate)
+    signal = rms_normalize(signal)
+    soundfile = al.Sndfile(target, 'w', al.Format('flac'), 1, new_rate)
+    soundfile.write_frames(signal)
+    soundfile.sync()
+
+#Used in noise approximation algorithms
+def normalize_noises(noisecsv, targetdir="noise8k/", new_rate=8000):
+    noises = vad.readcsv(noisecsv)
+    for noisefile in noises:
+        resample_and_normalize_file(noisefile, targetdir+os.path.basename(noisefile), new_rate)
 
 def rms_normalize(signal):
     return signal/rms(signal)
@@ -88,8 +120,10 @@ def spect_power(frame, rate, size): #size=len(frame)
     return abs(Y)
 
 def read_soundfile(path):
+    return soundfile.read(path)
+    """
     if al != None:
-        soundfile = al.Sndfile(path, 'r')
+        return soundfile.read(path)
         return soundfile.read_frames(soundfile.nframes), soundfile.samplerate
     else:
         try:
@@ -99,3 +133,4 @@ def read_soundfile(path):
             return wav
         except ValueError:
             return None
+    """

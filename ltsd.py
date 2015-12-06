@@ -18,7 +18,7 @@ except ImportError:
     from scipy.io import wavfile
 
 #WINSIZE=8192
-WINMS = 25
+WINMS = 50
 
 def read_signal(filename, winsize):
     wf=wave.open(filename,'rb')
@@ -41,13 +41,14 @@ def get_frame(signal, winsize, no):
     return signal[start:end]
 
 class LTSD():
-    def __init__(self,winsize,window,order):
+    def __init__(self,winsize,window,order, init_noise=None):
         self.winsize = winsize
         self.window = window
         self.order = order
         self.amplitude = {}
         self.E0 = 0
         self.E1 = 0
+        self.init_noise = init_noise
 
     def get_amplitude(self,signal,l):
         if self.amplitude.has_key(l):
@@ -70,11 +71,18 @@ class LTSD():
         #Calculate the average noise spectrum amplitude based　on 20 frames in the head parts of input signal.
         #print("first frames", self.winsize,self.winsize*10,self.winsize*20)
         noise_start = self.winsize
-        noise_end = self.winsize*10
-        self.avgnoise = self.compute_noise_avg_spectrum(signal[noise_start:noise_end])**2
-        noise_magnitudes=np.zeros(9)
-        for i in range(0,9):
-            noise_magnitudes[i] = np.sum((get_frame(signal, self.winsize, i+1)*self.window)**2)
+        noise_end = self.winsize*20
+        if self.init_noise is None:
+            noise_magnitudes=np.zeros(9)
+            noise = signal
+            print("not using auxilliary noise signal")
+        else:
+            print("processing auxilliary noise signal")
+            noise = self.init_noise*(speech.rms(signal)/speech.rms(self.init_noise))
+            noise_magnitudes=np.zeros(len(noise[noise_start:noise_end])/self.winsize/2)
+        for i in range(0,len(noise_magnitudes)):
+            noise_magnitudes[i] = np.sum((get_frame(noise[noise_start:noise_end], self.winsize, i+1)*self.window)**2)
+        self.avgnoise = self.compute_noise_avg_spectrum(noise[noise_start:noise_end])**2
         self.E0 = min(noise_magnitudes)
         self.E1 = max(noise_magnitudes)
         #print(self.E0, self.E1)
@@ -151,17 +159,22 @@ def test(filename=None):
     ax.vlines([n1,n2], -20,20)
     plt.show()
 
-def vad(soundfile):
+def vad(soundfile, noisefile=None):
     signal,rate = speech.read_soundfile(soundfile)
+    if noisefile != None:
+        noise,nrate = speech.read_soundfile(noisefile)
+        print("found noisefile: "+noisefile)
+    else:
+        noise = None
     seconds = float(len(signal))/rate
     winsize = librosa.time_to_samples(float(WINMS)/1000, rate)[0]
     window = sp.hanning(winsize)
-    ltsd = LTSD(winsize,window,5)
+    ltsd = LTSD(winsize,window,5, init_noise=noise)
     res, threshold,nstart,nend =  ltsd.compute(signal)
     segments = ltsd.segments(res, threshold)
     #print(float(len(signal))/rate, librosa.core.frames_to_time(len(res), 8000, winsize/2))
     segments = librosa.core.frames_to_time(segments, rate, winsize/2).tolist()
-    indexes = [0]
+    indexes = []
     for s in segments:
         indexes += s
     indexes.append(seconds)
@@ -172,10 +185,18 @@ if __name__ == "__main__":
     import random, os, sys
     import matplotlib.pyplot as plt
     from sys import argv
-    if len(sys.argv) == 3:
+    if len(sys.argv) >= 3:
         for f in os.listdir(argv[1]):
             if os.path.splitext(f)[1] == ".flac":
-                indexes = vad(argv[1]+f)
+                signame = os.path.basename(os.path.splitext(f)[0])
+                print(signame)
+                ids = signame.split("_")
+                noisefile = "noise8k/"+ids[1]+".flac"
+                print(noisefile)
+                #if not os.path.exists(noisefile):
+                if True:
+                    noisefile = None
+                indexes = vad(argv[1]+f, noisefile)
                 res_name = argv[2]+"/ltsd_"+os.path.basename(os.path.splitext(f)[0])+".txt"
                 f = open(res_name, 'w')
                 f.write("\n".join([str(x) for x in indexes]))

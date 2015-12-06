@@ -1,6 +1,7 @@
 import os
 import csv
 from subprocess import call
+from matplotlib import pyplot as plt
 import librosa
 import numpy as np
 import math
@@ -42,7 +43,17 @@ def preprocess(signalcsv="signals.txt", noisecsv="noise.txt", snrcsv="snr.txt", 
 
 def evaluation(resultpath="res/", metricspath="eval/"):
     tr = load_truths()
-    all_metrics(tr, resultpath, metricspath)
+    compute_all_metrics(tr, resultpath, metricspath)
+
+def evaluate_for_speaker_distances(resulpath="res/", metricspath="eval/"):
+    truths
+    for ids in predictions():
+        rangesids[1]
+
+def predictions(predictionpath="res/"):
+     for fn in os.listdir(predictionpath):
+        if os.path.splitext(fn)[1] == ".txt":
+            yield(os.path.splitext(fn)[0], os.path.splitext(fn[0].split("_")))
 
 def compute_all_metrics(truths, resultpath, metricspath):
     for fn in os.listdir(resultpath):
@@ -95,8 +106,8 @@ def summarize(metricspath="eval/"):
                 metrics[id] = m
     return metrics
 
-def call_vads(algocsv, audiopath, resultpath):
-    algorithms = readcsv(algocsv, True)
+def call_vads(algorithms, audiopath="tmp/", resultpath="res/"):
+    #algorithms = readcsv(algocsv, True)
     for instruction in algorithms:
         print(instruction+[audiopath]+[resultpath])
         subprocess.call(instruction+[audiopath]+[resultpath])
@@ -176,25 +187,29 @@ def segments_to_indexes(segments):
         indexes.append([s[1], "end"])
     return sorted(indexes)
 
-def plot_segments(truth, prediction, ax=None):
+def plot_segments(segments, cl='ti', ax=None):
     if ax == None:
         p = plt
     else:
         p = ax
-    for segment in prediction:
-        p.axvspan(segment[0], segment[1], facecolor='orange', alpha=0.25, linestyle='dashed')
-    for segment in truth:
-        p.axvspan(segment[0], segment[1], facecolor='cyan', alpha=0.25)
+    args = {}
+    args['p'] = {'facecolor':'orange', 'alpha':0.25, 'linestyle':'dashed'}
+    args['ti'] = {'facecolor':'pink', 'alpha':0.25}
+    args['tj'] = {'facecolor':'green', 'alpha':0.25}
+    a = args[cl]
+    for segment in segments:
+        p.axvspan(segment[0], segment[1], **a)
 
 #create linear values for x-axis
 def xspace(samples, frame_len, samplerate):
     return np.linspace(0,samples*frame_len/samplerate, samples)
 
 if __name__ == "__main__":
-    instructions = set('preprocess', 'vad', 'evaluation')
-    if len(sys.argv) == 1:
-        main()
-    elif len(sys.argv)==7:
-        main(*sys.argv)
-    else:
-        print("Wrong amount of arguments. ("+str(len(argv))+")")
+    #instructions = set(['nothing', 'preprocess', 'vad', 'evaluation'])
+    vads = readcsv("algo.txt", True)
+    #if len(sys.argv) == 1:
+    #    main()
+    #elif len(sys.argv)==7:
+    #    main(*sys.argv)
+    #else:
+    #    print("Wrong amount of arguments. ("+str(len(argv))+")")
