@@ -9,7 +9,9 @@ import speech_processing as speech
 import sys
 import subprocess
 import mergelabels
+import multiprocessing
 from tempfile import NamedTemporaryFile
+from time import time
 
 try:
     try:
@@ -56,23 +58,31 @@ def predictions(predictionpath="res/"):
             yield(os.path.splitext(fn)[0], os.path.splitext(fn[0].split("_")))
 
 def compute_all_metrics(truths, resultpath, metricspath):
+    tasks = []
     for fn in os.listdir(resultpath):
         split1 = os.path.splitext(fn)
         if split1[1]==".txt":
             identifier = split1[0]
             ids = identifier.split("_")
             if ids[1][0] in truths:
-                #Only evaluate against combined labels for now
-                compute_metrics(identifier, truths[ids[1][0]]["combined"], resultpath+fn, metricspath)
+                #TODO: Only evaluate against combined labels for now
+                tasks.append((identifier, truths[ids[1][0]]["combined"], resultpath+fn, metricspath))
+    pool = multiprocessing.Pool(None)
+    r = pool.map_async(compute_metrics, tasks)
+    r.wait()
 
-def compute_metrics(id, truths, predictions, metricspath):
+def compute_metrics(args):
+    id, truths, predictions, metricspath = args
+    print("computing metrics for "+id)
     tr_fname = ""
     with NamedTemporaryFile('w') as tr, open(metricspath+"/"+id+"_metrics.txt", "w") as metricf:
         np.savetxt(tr, mergelabels.mergelists(truths), delimiter="\n")
         tr_fname = tr.name
         nullf = open(os.devnull, 'w')
+        t = time()
         call(["julia", "metric/metric.jl", id, tr_fname, predictions], stdout=metricf, stderr=nullf)
         tr.close
+    print(id+" took "+str(time()-t)+" seconds")
 
 def read_metrics(metricfn):
     data = readcsv(metricfn, True)
@@ -104,7 +114,18 @@ def summarize(metricspath="eval/"):
             if res != None:
                 id, m = res
                 metrics[id] = m
-    return metrics
+    performances = {}
+    for k, m in metrics.iteritems():
+        if m['algo'] not in performances:
+            performances[m['algo']] = {'acc':float(m['ACC']), 'recall':float(m['TPR']), 'count':1}
+        else:
+            performances[m['algo']]['acc'] += float(m['ACC'])
+            performances[m['algo']]['recall'] += float(m['TPR'])
+            performances[m['algo']]['count'] += 1
+    for k,p in performances.iteritems():
+        p['acc'] = p['acc']/p['count']
+        p['recall'] = p['recall']/p['count']
+    return metrics, performances
 
 def call_vads(algorithms, audiopath="tmp/", resultpath="res/"):
     #algorithms = readcsv(algocsv, True)
