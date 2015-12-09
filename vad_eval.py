@@ -64,7 +64,7 @@ def main(signalcsv="signals.txt", noisecsv="noise.txt", snrcsv="snr.txt", algocs
         ["python", "ad-ltsd.py", "batch"],
         ["python", "ltacs-vad.py", "batch"],
         ["python", "rse-vad.py", "batch"],
-        ["python", "pitchvad.py", "batch"]
+        ["python", "snac-vad.py", "batch"]
     ]
     print(signal_list)
     for signal in signal_list:
