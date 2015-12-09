@@ -112,10 +112,8 @@ def compute_all_metrics(truths, resultpath, metricspath):
 def compute_metrics(args):
     id, truths, predictions, metricspath = args
     truths = segments_to_indexes(truths, "list")
-    print("computing metrics for "+id)
     tr_fname = ""
     with open(metricspath+"/"+id+"_metrics.txt", "w") as metricf:
-        print("Writing metrics to "+metricspath+"/"+id+"_metrics.txt")
     #with NamedTemporaryFile('w') as tr, open(metricspath+"/"+id+"_metrics.txt", "w") as metricf:
         #np.savetxt(tr, truths, delimiter="\n")
         #tr.writelines([str(index[0])+'\n' for index in truths])
@@ -135,7 +133,6 @@ def compute_metrics(args):
         metricf.close()
         #call(["julia", "metric/metric.jl", id, tr_fname, predictions], stdout=metricf, stderr=nullf)
         #tr.close
-    print(id+" took "+str(time()-t)+" seconds")
 
 def print_truths(truths):
     t = mergelabels.mergelists(truths)
@@ -156,11 +153,14 @@ def read_metrics(metricfn):
         #    m["FP"] = m["I"]+m["M"]+m["OS"]+m["OE"]
         #if not "FN" in m:
         #    m["FN"] = m["D"]+m["F"]+m["US"]+m["UE"]
+        try:
         acc = (m["TP"]+m["TN"])/(m["TP"]+m["TN"]+m["FP"]+m["FN"])
         recall = m["TP"]/(m["TP"]+m["FN"])
         fpr = m["FP"]/(m["TP"]+m["FN"])
         return id, {"algo":info[0], "signal":info[1], "noise":info[2],
             "snr":float(info[3]), "metrics":m, "ACC":acc, "TPR":recall}
+        except KeyError:
+            return None
     return None
 
 def summarize(metricspath="eval/", group=None):
