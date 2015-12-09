@@ -7,6 +7,7 @@ import os
 import soundfile
 import vad_eval as vad
 import random
+import multiprocessing
 
 try:
     try:
@@ -18,7 +19,7 @@ except ImportError:
     print("Warning: scikits.audiolab not found! Using scipy.io.wavfile")
     from scipy.io import wavfile
 
-def combine(signal_list, noise_list, snrlist, soundpath="tmp", target_rate=8000, overwrite=False):
+def combine(signal_list, noise_list, snrlist, soundpath="tmp", target_rate=8000, overwrite=False, parallel=True):
     for signal_file, labelfile in signal_list:
         signal, srate = read_soundfile(signal_file)
         if srate != target_rate:
@@ -39,6 +40,7 @@ def combine(signal_list, noise_list, snrlist, soundpath="tmp", target_rate=8000,
             else:
                 noise = rms_normalize(noise)[:len(signal)]
             print("Opened ", noise_file)
+            tasks = []
             for snr in snrlist:
                 signal_name = os.path.basename(os.path.splitext(signal_file)[0])
                 noise_name = os.path.basename(os.path.splitext(noise_file)[0])
@@ -46,14 +48,33 @@ def combine(signal_list, noise_list, snrlist, soundpath="tmp", target_rate=8000,
                 print(new_name)
                 if overwrite or os.path.exists(new_name) == False:
                     print("Combining with SNR", snr)
-                    noisy_signal = signal*snrdb2ratio(snr, signal, noise)+noise
-                    noisy_signal = noisy_signal/peak(noisy_signal)
-                    soundfile = al.Sndfile(new_name, 'w', al.Format('flac'), 1, target_rate)
-                    soundfile.write_frames(noisy_signal)
-                    soundfile.sync()
-                    print("Wrote", new_name)
+                    args = [snr, signal, noise, target_rate, new_name]
+                    if parallel:
+                        tasks.append(args)
+                    else:
+                        compute_combinations(args)
+                        """
+                        noisy_signal = signal*snrdb2ratio(snr, signal, noise)+noise
+                        noisy_signal = noisy_signal/peak(noisy_signal)
+                        soundfile = al.Sndfile(new_name, 'w', al.Format('flac'), 1, target_rate)
+                        soundfile.write_frames(noisy_signal)
+                        soundfile.sync()
+                        """
                 else:
                     print(new_name+" exists, skipping")
+                if parallel:
+                    pool = multiprocessing.Pool(None)
+                    r = pool.map_async(compute_combination, tasks)
+                    r.wait()
+
+def compute_combination(args):
+    snr, signal, noise, target_rate, new_name = args
+    noisy_signal = signal*snrdb2ratio(snr, signal, noise)+noise
+    noisy_signal = noisy_signal/peak(noisy_signal)
+    soundfile = al.Sndfile(new_name, 'w', al.Format('flac'), 1, target_rate)
+    soundfile.write_frames(noisy_signal)
+    soundfile.sync()
+    print("Wrote", new_name)
 
 def add_noise(signal, noisefile, snr=10):
     noise,nrate = read_soundfile(noisefile)

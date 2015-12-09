@@ -14,6 +14,7 @@ from tempfile import NamedTemporaryFile
 from time import time
 from simple_evaluation import compare_labels
 import shutil
+from sys import argv
 
 try:
     try:
@@ -73,8 +74,8 @@ def main(signalcsv="signals.txt", noisecsv="noise.txt", snrcsv="snr.txt", algocs
         shutil.copyfile("signal8k/"+sig_fn, tmppath+os.path.splitext(sig_fn)[0]+"_clean_40.0.flac")
         call_vads(algolist, tmppath, resultpath)
         evaluation(resultpath, metricspath)
-        #for f in os.listdir(tmppath):
-        #    os.remove(tmppath+f)
+        for f in os.listdir(tmppath):
+            os.remove(tmppath+f)
 
 def evaluation(resultpath="res/", metricspath="eval/"):
     tr = load_truths()
@@ -156,6 +157,7 @@ def read_metrics(metricfn):
         #    m["FN"] = m["D"]+m["F"]+m["US"]+m["UE"]
         acc = (m["TP"]+m["TN"])/(m["TP"]+m["TN"]+m["FP"]+m["FN"])
         recall = m["TP"]/(m["TP"]+m["FN"])
+        fpr = m["FP"]/(m["TP"]+m["FN"])
         return id, {"algo":info[0], "signal":info[1], "noise":info[2],
             "snr":float(info[3]), "metrics":m, "ACC":acc, "TPR":recall}
     return None
@@ -298,11 +300,10 @@ def xspace(samples, frame_len, samplerate):
     return np.linspace(0,samples*frame_len/samplerate, samples)
 
 if __name__ == "__main__":
-    #instructions = set(['nothing', 'preprocess', 'vad', 'evaluation'])
-    vads = readcsv("algo.txt", True)
-    #if len(sys.argv) == 1:
-    #    main()
-    #elif len(sys.argv)==7:
-    #    main(*sys.argv)
-    #else:
-    #    print("Wrong amount of arguments. ("+str(len(argv))+")")
+    if len(argv) == 1:
+        main()
+    elif len(argv) == 4:
+        main(tmppath=argv[1], resultpath=argv[2], metricspath=argv[3])
+    else:
+        print("usage: "+argv[1]+" [tmppath/ resultpath/ metricspath/]")
+        print("  paths for temporary audiofiles, vad results and metrics")
