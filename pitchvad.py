@@ -12,6 +12,9 @@ import librosa
 import vad_eval as vad
 import random
 import speech_processing as speech
+import multiprocessing
+import itertools
+from tempfile import NamedTemporaryFile
 
 try:
     try:
@@ -23,32 +26,27 @@ except ImportError:
     print("Warning: scikits.audiolab not found! Using scipy.io.wavfile")
     from scipy.io import wavfile
 
-def pipeline(path, frame_ms=30, hop_ms=15, filt=True, noisy=True, shift=True):
-    print("load")
+def pipeline(path, frame_ms=30, hop_ms=15, filt=True, noisy=True, shift=True, snr=30):
     #sig, rate = librosa.load(path)
     #sig2, rate2 = ad.read_file(path)
     soundfile = al.Sndfile(path, 'r')
     rate = soundfile.samplerate
     sig = soundfile.read_frames(soundfile.nframes)
     sig = signal.wiener(sig)
-    print("rate", rate)
     fsize = librosa.time_to_samples(float(frame_ms)/1000, rate)[0]
     hop = librosa.time_to_samples(float(hop_ms)/1000, rate)[0]
-    print("frame size", fsize, "hop", hop)
     if filt:
         sig = bp_filter(sig)
     if noisy:
-        sig = speech.add_noise(sig, "noise8k/white.flac", 30)
+        sig = speech.add_noise(sig, "noise8k/white.flac", snr)
     frames = librosa.util.frame(sig, fsize, hop)
     w = signal.hann(fsize)
     #frames_W = np.zeros_like(frames)
     #print(frames.shape)
     #frames = frames.T
     #print(w.shape)
-    print("windowing function")
     frames_w = np.apply_along_axis(lambda x,w: x*w, 0, frames, w)
     frames = frames_w
-    print("window suppression")
     frames = np.apply_along_axis(lambda x,w: x/(w+1e-15), 0, frames, w)
     #    frames_W[i] = signal.convolve(frames[i],w, mode='same')
     #frames = frames_W.T
@@ -56,20 +54,14 @@ def pipeline(path, frame_ms=30, hop_ms=15, filt=True, noisy=True, shift=True):
     #w = w[w.size/2:]
     #print(frames.shape)
     #frames = sigutil.enframe(sig, fsize, hop, signal.hann)
-    print("normalized autocorrelation")
+    #print("normalized autocorrelation")
     naccs = np.apply_along_axis(nacc, 0, frames)
-    print("trimming")
+    #print("trimming")
     naccs = np.apply_along_axis(trim_frame, 0, naccs)
-    minacs = np.zeros_like(naccs)
-    for i in range(len(naccs.T)):
-        minacs[:,i] = min_ac(naccs.T, i)
-    print(naccs.shape)
-    print(minacs.shape)
-    print("lags")
     lags = np.zeros(len(naccs.T))
     acf_n = np.zeros(len(naccs.T))
-    for i in range(len(minacs.T)):
-        frame = minacs.T[i]
+    for i in range(len(naccs.T)):
+        frame = naccs.T[i]
         relmax = signal.argrelmax(frame)[0]
         if len(relmax)>0:
             argmax2 = relmax[0] + np.argmax(frame[relmax[0]:])
@@ -86,16 +78,25 @@ def pipeline(path, frame_ms=30, hop_ms=15, filt=True, noisy=True, shift=True):
         lags[i] = argmax2
         acf_n[i] = len(relmax)
         #print(lags[i], len(relmax))
-        minacs.T[i] = np.roll(frame, argmax2)
-    print("variances")
+        naccs.T[i] = np.roll(frame, -1*argmax2)
+    #minacs = np.zeros_like(naccs)
+    #for i in range(len(naccs.T)):
+    #    minacs[:,i] = min_ac(naccs.T, i)
+    meanacs = np.zeros_like(naccs)
+    for i in range(len(naccs.T)):
+        meanacs[:,i] = mean_ac(naccs.T, i)
+    #print(naccs.shape)
+    #print(meanacs.shape)
+    #print("lags")
+    #print("variances")
     #acvars = np.apply_along_axis(acvar, 0, naccs2)
-    acvars = np.apply_along_axis(acvar, 0, minacs)
-    print("ltacs")
+    acvars = np.apply_along_axis(acvar, 0, meanacs)
+    #print("ltacs")
     ltacs = np.zeros_like(acvars)
     for i in range(len(acvars)):
         ltacs[i] = ltac(acvars, i)
-    print("done")
-    return sig, rate, frames, fsize, minacs, acvars, ltacs, (lags, acf_n)
+    print("done: "+path)
+    return sig, rate, frames, fsize, meanacs, acvars, ltacs, (lags, acf_n)
 
 def bp_filter(data, lowcut=100.0, highcut=2000.0, fs=8000.0, order=4):
     nyq = 0.5 *fs
@@ -116,6 +117,11 @@ def nacc(frame):
 def trim_frame(frame, part=0.025):
     samples = int((len(frame)*part))
     return frame[samples:len(frame)-samples]
+
+def mean_ac(ac, l, R1=2, R2=2):
+    r1 = max(0,l-R1)
+    r2 = min(len(ac),l+R1)
+    return np.mean(ac[r1:r2], 0)
 
 def min_ac(ac, l, R1=2, R2=2):
     r1 = max(0,l-R1)
@@ -152,7 +158,7 @@ def ac_stat(frame):
     acorr = np.correlate(frames,f,mode='full')
     return acorr[acorr.size/2:]
 
-def predict(signal, threshold=-55, frame_hop=120):
+def predict(signal, threshold=-55, rate=8000, frame_hop=120):
     ranges = []
     segment=[]
     for i in range(0, len(signal)):
@@ -173,9 +179,20 @@ def write_results(segments, res_name, l):
     for s in segments:
         indexes += s
     indexes.append(l)
+    print("writing "+res_name)
     f = open(res_name, 'w')
     f.write("\n".join([str(x) for x in indexes]))
     f.close()
+
+def print_results(segments, res_name, l, n=None):
+    indexes = []
+    if n is None or n >= len(segments)*2:
+        n = len(segments)
+    for s in segments[:n/2]:
+        print(s[0])
+        print(s[1])
+    if n is None or n >= len(segments)*2:
+        print(l)
 
 def threshold_test(s,t,i):
     if hasattr(t, "__len__"):
@@ -212,6 +229,27 @@ def moving_average(x, W_len=320):
     a = np.convolve(w/w.sum(),x+padd_y,mode='same')
     return a-padd_y
 
+def compute_vad(args):
+    filename, path, resultpath = args
+    signame = os.path.basename(os.path.splitext(filename)[0])
+    ids = signame.split("_")
+    print("computing: "+path+filename)
+    sig, rate, frames, fsize, naccs, acvars, ltacs, more = pipeline(path+filename)
+    seconds = float(len(sig))/rate
+    lmin, smoothmin = local_min_array(ltacs)
+    lmin = lmin+7
+    segments = predict(ltacs, lmin)
+    res_name = resultpath+"/nacc2_"+os.path.basename(os.path.splitext(filename)[0])+".txt"
+    write_results(segments, res_name, seconds)
+
+def read_label_list_file(fn):
+    with open(fn) as f:
+        times = [float(x) for x in f.readlines()]
+        segments = [times[i:i+2] for i in xrange(0, len(times), 2)]
+        if len(segments[-1]) == 1:
+            segments = segments[:-1]
+        return segments
+
 if __name__ == "__main__":
     import os
     import matplotlib.pyplot as plt
@@ -219,7 +257,7 @@ if __name__ == "__main__":
     #signal, params = read_signal(sound,WINSIZE)
     scenario=None
     truths = vad.load_truths()
-    args = set(['sig', 'ac-spec', 'var', 'ltac', 'ac-feature', 'batch'])
+    args = set(['sig', 'ac-spec', 'var', 'ltac', 'ac-feature', 'batch', 'test-labels'])
     if len(argv) >= 2 and argv[1] in args:
         if len(argv)>=3 and argv[1] != 'batch':
             filename = argv[2]
@@ -259,19 +297,34 @@ if __name__ == "__main__":
             #plt.plot(np.linspace(0,seconds, len(more[0])), more[0])
             plt.plot(np.linspace(0,seconds, len(more[1])), more[1])
             plt.show()
+        elif argv[1] == 'test-labels':
+            vad.plot_segments(truths[scene][scene+'i'], 'ti', plt)
+            vad.plot_segments(truths[scene][scene+'j'], 'tj', plt)
+            [index[0] for index in vad.segments_to_indexes(truths[scene]['combined'])]
+            #vad.plot_segments(truths[scene][combined], 'p', plt)
+            lmin, smoothmin = local_min_array(ltacs)
+            lmin = lmin+7
+            predictions = predict(ltacs, lmin)
+            with NamedTemporaryFile('w') as tr:
+                #np.savetxt(tr, vad.mergelabels.mergelists([predictions]), delimiter="\n")
+                #tr.writelines([str(index[0])+'\n' for index in truths[scene]['combined']])
+                tr.writelines([str(index[0])+"\n" for index in vad.segments_to_indexes(truths[scene]['combined'])])
+                tr.flush()
+                processed_labels = read_label_list_file(tr.name)
+                tr.close
+                #vad.plot_segments(predictions, 'ti', plt)
+                vad.plot_segments(processed_labels, 'p', plt)
+                plt.plot(np.linspace(0,seconds, len(ltacs)), ltacs)
+                plt.plot(np.linspace(0,seconds, len(lmin)), lmin+2)
+                plt.show()
         elif argv[1] == 'batch':
+            files = []
             for f in os.listdir(argv[2]):
                 if os.path.splitext(f)[1] == ".flac":
-                    signame = os.path.basename(os.path.splitext(f)[0])
-                    print(signame)
-                    ids = signame.split("_")
-                    print(argv[2]+f)
-                    sig, rate, frames, fsize, naccs, acvars, ltacs, more = pipeline(argv[2]+f)
-                    seconds = float(len(sig))/rate
-                    lmin, smoothmin = local_min_array(ltacs)
-                    lmin = lmin+7
-                    segments = predict(ltacs, lmin)
-                    res_name = argv[3]+"/acc_"+os.path.basename(os.path.splitext(f)[0])+".txt"
-                    write_results(segments, res_name, seconds)
+                    files.append(f)
+            pool = multiprocessing.Pool(None)
+            args = [(f, argv[2], argv[3]) for f in files]
+            r = pool.map_async(compute_vad, args)
+            r.wait()
     else:
         print("usage "+argv[0]+" <<"+("|".join(args))+"> [soundfile] | batch sfpath respath>")

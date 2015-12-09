@@ -12,6 +12,8 @@ import mergelabels
 import multiprocessing
 from tempfile import NamedTemporaryFile
 from time import time
+from simple_evaluation import compare_labels
+import shutil
 
 try:
     try:
@@ -43,14 +45,45 @@ def preprocess(signalcsv="signals.txt", noisecsv="noise.txt", snrcsv="snr.txt", 
     #call_vads(algorithms, tmppath, resultpath)
     #calculate_metrics(resultpath)
 
+def resample_data(signalcsv="signals.txt", target="signal8k/", rate=8000):
+    signal_list = readcsv(signalcsv)
+    for signal in signal_list:
+        speech.resample_and_normalize_file(signal, target+os.path.basename(signal), rate)
+
+def main(signalcsv="signals.txt", noisecsv="noise.txt", snrcsv="snr.txt", algocsv="algo.txt", tmppath="tmp/", resultpath="res/", metricspath="eval/"):
+    signal_list = readcsv(signalcsv, True)
+    noise_list = readcsv(noisecsv)
+    snrlist = readcsv(snrcsv)
+    try:
+        snrlist = [float(x) for x in snrlist]
+    except ValueError:
+        print("Failed reading SNR definitions as float-values")
+    algolist = [
+        ["python", "sos-vad.py"],
+        ["python", "ad-ltsd.py", "batch"],
+        ["python", "ltacs-vad.py", "batch"],
+        ["python", "rse-vad.py", "batch"],
+        ["python", "pitchvad.py", "batch"]
+    ]
+    print(signal_list)
+    for signal in signal_list:
+        speech.combine([signal], noise_list, snrlist, tmppath)
+        sig_fn = os.path.basename(signal[0])
+        print(signal, tmppath)
+        shutil.copyfile("signal8k/"+sig_fn, tmppath+os.path.splitext(sig_fn)[0]+"_clean_40.0.flac")
+        call_vads(algolist, tmppath, resultpath)
+        evaluation(resultpath, metricspath)
+        #for f in os.listdir(tmppath):
+        #    os.remove(tmppath+f)
+
 def evaluation(resultpath="res/", metricspath="eval/"):
     tr = load_truths()
     compute_all_metrics(tr, resultpath, metricspath)
 
-def evaluate_for_speaker_distances(resulpath="res/", metricspath="eval/"):
+def evaluate_for_speaker_distances(resultpath="res/", metricspath="eval/"):
     truths
     for ids in predictions():
-        rangesids[1]
+        pass
 
 def predictions(predictionpath="res/"):
      for fn in os.listdir(predictionpath):
@@ -64,31 +97,52 @@ def compute_all_metrics(truths, resultpath, metricspath):
         if split1[1]==".txt":
             identifier = split1[0]
             ids = identifier.split("_")
+            print(ids)
             if ids[1][0] in truths:
                 #TODO: Only evaluate against combined labels for now
                 tasks.append((identifier, truths[ids[1][0]]["combined"], resultpath+fn, metricspath))
-    pool = multiprocessing.Pool(None)
-    r = pool.map_async(compute_metrics, tasks)
-    r.wait()
+    #pool = multiprocessing.Pool(None)
+    #r = pool.map_async(compute_metrics, tasks)
+    #r.wait()
+    for task in tasks:
+        compute_metrics(task)
 
 def compute_metrics(args):
     id, truths, predictions, metricspath = args
+    truths = segments_to_indexes(truths, "list")
     print("computing metrics for "+id)
     tr_fname = ""
-    with NamedTemporaryFile('w') as tr, open(metricspath+"/"+id+"_metrics.txt", "w") as metricf:
-        np.savetxt(tr, mergelabels.mergelists(truths), delimiter="\n")
-        tr_fname = tr.name
-        nullf = open(os.devnull, 'w')
+    with open(metricspath+"/"+id+"_metrics.txt", "w") as metricf:
+        print("Writing metrics to "+metricspath+"/"+id+"_metrics.txt")
+    #with NamedTemporaryFile('w') as tr, open(metricspath+"/"+id+"_metrics.txt", "w") as metricf:
+        #np.savetxt(tr, truths, delimiter="\n")
+        #tr.writelines([str(index[0])+'\n' for index in truths])
+        #tr.flush()
+        #tr_fname = tr.name
+        #nullf = open(os.devnull, 'w')
         t = time()
-        call(["julia", "metric/metric.jl", id, tr_fname, predictions], stdout=metricf, stderr=nullf)
-        tr.close
+        prediction_data = np.loadtxt(predictions)
+        if len(prediction_data) > 1:
+            tp, tn, fp, fn = compare_labels(np.loadtxt(predictions), truths)
+            metricf.write(id+" TP "+str(tp)+"\n")
+            metricf.write(id+" TN "+str(tn)+"\n")
+            metricf.write(id+" FP "+str(fp)+"\n")
+            metricf.write(id+" FN "+str(fn)+"\n")
+        else:
+            metricf.write(id+" FN 999 failed to find any\n")
+        metricf.close()
+        #call(["julia", "metric/metric.jl", id, tr_fname, predictions], stdout=metricf, stderr=nullf)
+        #tr.close
     print(id+" took "+str(time()-t)+" seconds")
+
+def print_truths(truths):
+    t = mergelabels.mergelists(truths)
+    for l in t:
+        print(l)
 
 def read_metrics(metricfn):
     data = readcsv(metricfn, True)
     if len(data) > 0:
-        print(metricfn)
-        print(data)
         m = {}
         id = data[0][0]
         info = id.split("_")
@@ -96,17 +150,17 @@ def read_metrics(metricfn):
             "snr":float(info[3])}
         for row in data:
             m[row[1]] = float(row[2])
-        if not "FP" in m:
-            m["FP"] = m["I"]+m["M"]+m["OS"]+m["OE"]
-        if not "FN" in m:
-            m["FN"] = m["D"]+m["F"]+m["US"]+m["UE"]
+        #if not "FP" in m:
+        #    m["FP"] = m["I"]+m["M"]+m["OS"]+m["OE"]
+        #if not "FN" in m:
+        #    m["FN"] = m["D"]+m["F"]+m["US"]+m["UE"]
         acc = (m["TP"]+m["TN"])/(m["TP"]+m["TN"]+m["FP"]+m["FN"])
         recall = m["TP"]/(m["TP"]+m["FN"])
         return id, {"algo":info[0], "signal":info[1], "noise":info[2],
             "snr":float(info[3]), "metrics":m, "ACC":acc, "TPR":recall}
     return None
 
-def summarize(metricspath="eval/"):
+def summarize(metricspath="eval/", group=None):
     metrics = {}
     for fn in os.listdir(metricspath):
         if os.path.splitext(fn)[1] == ".txt":
@@ -114,18 +168,26 @@ def summarize(metricspath="eval/"):
             if res != None:
                 id, m = res
                 metrics[id] = m
-    performances = {}
+    perf = {}
     for k, m in metrics.iteritems():
-        if m['algo'] not in performances:
-            performances[m['algo']] = {'acc':float(m['ACC']), 'recall':float(m['TPR']), 'count':1}
+        snr = float(k.split("_")[3])
+        if snr not in perf:
+            perf[snr] = {}
+        if m['algo'] not in perf[snr]:
+            perf[snr][m['algo']] = {'acc':float(m['ACC']), 'recall':float(m['TPR']), 'count':1}
         else:
-            performances[m['algo']]['acc'] += float(m['ACC'])
-            performances[m['algo']]['recall'] += float(m['TPR'])
-            performances[m['algo']]['count'] += 1
-    for k,p in performances.iteritems():
-        p['acc'] = p['acc']/p['count']
-        p['recall'] = p['recall']/p['count']
-    return metrics, performances
+            perf[snr][m['algo']]['acc'] += float(m['ACC'])
+            perf[snr][m['algo']]['recall'] += float(m['TPR'])
+            perf[snr][m['algo']]['count'] += 1
+    for snr in perf.keys():
+        for k,p in perf[snr].iteritems():
+            p['acc'] = p['acc']/p['count']
+            p['recall'] = p['recall']/p['count']
+    return metrics, perf
+
+def plot_accuracy_snr(metrics):
+    for key in metrics.keys:
+        print(key)
 
 def call_vads(algorithms, audiopath="tmp/", resultpath="res/"):
     #algorithms = readcsv(algocsv, True)
@@ -201,12 +263,22 @@ def load_truths(paths=None):
         scenario['combined'] = combined
     return data
 
-def segments_to_indexes(segments):
+def segments_to_indexes(segments, style="tuples"):
     indexes = []
     for s in segments:
         indexes.append([s[0], "start"])
         indexes.append([s[1], "end"])
-    return sorted(indexes)
+    indexes = sorted(indexes)
+    last = "end"
+    filtered = []
+    for i in indexes:
+        if i[1] != last:
+            if style == "tuples":
+                filtered.append(i)
+            else:
+                filtered.append(i[0])
+        last = i[1]
+    return filtered
 
 def plot_segments(segments, cl='ti', ax=None):
     if ax == None:
@@ -215,7 +287,7 @@ def plot_segments(segments, cl='ti', ax=None):
         p = ax
     args = {}
     args['p'] = {'facecolor':'orange', 'alpha':0.25, 'linestyle':'dashed'}
-    args['ti'] = {'facecolor':'pink', 'alpha':0.25}
+    args['ti'] = {'facecolor':'blue', 'alpha':0.25}
     args['tj'] = {'facecolor':'green', 'alpha':0.25}
     a = args[cl]
     for segment in segments:

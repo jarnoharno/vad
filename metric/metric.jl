@@ -33,7 +33,8 @@ function read_seq(path)
 end
 
 function compute_scores(actual, predicted)
-    extended_scores(initial_scores(read_seq(actual),read_seq(predicted)))
+    #extended_scores(initial_scores(read_seq(actual),read_seq(predicted)))
+    initial_scores(read_seq(actual),read_seq(predicted))
 end
 
 function initial_scores(actual::AbstractString, predicted::AbstractString)
@@ -114,8 +115,8 @@ function summarize(scores)
     d = Dict{Metric.Score,Float64}([s=>0.0 for s in instances(Metric.Score)])
     # remove zero scores
     pop!(d,NA)
-    pop!(d,FP)
-    pop!(d,FN)
+    #pop!(d,FP)
+    #pop!(d,FN)
     for s in scores
         d[s[1]] += s[2]
     end

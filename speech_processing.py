@@ -82,6 +82,7 @@ def tilify_signal(signal, rate, sfade):
     return np.concatenate((tail[:fade], fadeout+fadein, head[fade+1:]))
 
 #Used in noise approximation algorithms
+#TODO: Actually produces corrupt data!
 def resample_and_normalize_file(source, target, new_rate):
     signal, srate = read_soundfile(source)
     if srate != new_rate:
@@ -123,8 +124,8 @@ def read_soundfile(path):
     return soundfile.read(path)
     """
     if al != None:
-        return soundfile.read(path)
-        return soundfile.read_frames(soundfile.nframes), soundfile.samplerate
+        sndfile = al.Sndfile(path, 'r')
+        return sndfile.read_frames(sndfile.nframes), sndfile.samplerate
     else:
         try:
             print("Warning: no audiolab. Trying to read WAV: "+path)

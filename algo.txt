@@ -1,0 +1,6 @@
+ceesr-vad/ceesr-vad segment
+g729/g729.sh
+python ad-ltsd.py batch
+python ltacs-vad batch
+python rse-vad batch
+python pitchvad batch 

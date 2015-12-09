@@ -110,9 +110,13 @@ class LTSD():
             return 0
         return 10.0*np.log10(np.sum(self.ltse(signal,l,order)**2/self.avgnoise)/float(len(self.avgnoise)))
 
-    def segments(self, ltsds, t, min_len=30):
+    def update_avgnoise(ltsds, l, k, alpha=0.25):
+        self.avgnoise = self.compute_noise_avg_spectrum(ltsds[i-k:i])**2
+
+    def segments(self, frames, ltsds, t, min_len=30):
         ranges = []
         segment=[]
+        n_noise = 0 #n_of_noise_neighbors
         for i in range(0, len(ltsds)):
             if ltsds[i]>t:
                 if len(segment) == 0 or len(segment) == 1:
@@ -123,6 +127,8 @@ class LTSD():
                 if len(segment) == 2:
                     ranges.append(segment)
                 segment = []
+                self.update_avgnoise(ltsds,i,k)
+                t = self.gamma()
         return ranges
 
 def test(filename=None):
@@ -171,9 +177,9 @@ def vad(soundfile, noisefile=None):
     window = sp.hanning(winsize)
     ltsd = LTSD(winsize,window,5, init_noise=noise)
     res, threshold,nstart,nend =  ltsd.compute(signal)
-    segments = ltsd.segments(res, threshold)
+    segments,  = ltsd.segments(res, threshold)
     #print(float(len(signal))/rate, librosa.core.frames_to_time(len(res), 8000, winsize/2))
-    segments = librosa.core.frames_to_time(segments, rate, winsize/2).tolist()
+    segments = librosa.core.samples_to_time(segments, rate).tolist()
     indexes = []
     for s in segments:
         indexes += s
