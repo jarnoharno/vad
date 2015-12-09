@@ -7,13 +7,13 @@ from scipy import signal, arange
 from sys import argv
 import sigproc as sigutil
 from sklearn.preprocessing import normalize
-import yin
 import librosa
 import vad_eval as vad
 import random
 import speech_processing as speech
 import multiprocessing
 import itertools
+import soundfile as sndfile
 from tempfile import NamedTemporaryFile
 
 try:
@@ -29,9 +29,7 @@ except ImportError:
 def pipeline(path, frame_ms=30, hop_ms=15, filt=True, noisy=True, shift=True, snr=60):
     #sig, rate = librosa.load(path)
     #sig2, rate2 = ad.read_file(path)
-    soundfile = al.Sndfile(path, 'r')
-    rate = soundfile.samplerate
-    sig = soundfile.read_frames(soundfile.nframes)
+    sig, rate = speech.read_soundfile(path)
     sig = signal.wiener(sig)
     fsize = librosa.time_to_samples(float(frame_ms)/1000, rate)[0]
     hop = librosa.time_to_samples(float(hop_ms)/1000, rate)[0]
@@ -257,7 +255,7 @@ if __name__ == "__main__":
     #signal, params = read_signal(sound,WINSIZE)
     scenario=None
     truths = vad.load_truths()
-    args = set(['sig', 'ac-spec', 'var', 'ltac', 'ac-feature', 'batch', 'test-labels'])
+    args = set(['sig', 'ac-spec', 'var', 'ltac', 'ac-feature', 'batch', 'test-labels', 'print'])
     if len(argv) >= 2 and argv[1] in args:
         if len(argv)>=3 and argv[1] != 'batch':
             filename = argv[2]
@@ -297,6 +295,10 @@ if __name__ == "__main__":
             #plt.plot(np.linspace(0,seconds, len(more[0])), more[0])
             plt.plot(np.linspace(0,seconds, len(more[1])), more[1])
             plt.show()
+        elif argv[1] == 'print':
+            lmin, smoothmin = local_min_array(ltacs)
+            lmin = lmin+7
+            print(predict(ltacs, lmin))
         elif argv[1] == 'test-labels':
             vad.plot_segments(truths[scene][scene+'i'], 'ti', plt)
             vad.plot_segments(truths[scene][scene+'j'], 'tj', plt)
@@ -322,9 +324,14 @@ if __name__ == "__main__":
             for f in os.listdir(argv[2]):
                 if os.path.splitext(f)[1] == ".flac":
                     files.append(f)
-            pool = multiprocessing.Pool(None)
+            pool = multiprocessing.Pool(10)
             args = [(f, argv[2], argv[3]) for f in files]
             r = pool.map_async(compute_vad, args)
             r.wait()
+	    pool.terminate()
+            pool.join()
+            ##no multiprocessing:
+            #for a in args:
+            #     compute_vad(a)
     else:
         print("usage "+argv[0]+" <<"+("|".join(args))+"> [soundfile] | batch sfpath respath>")

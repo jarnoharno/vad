@@ -18,6 +18,6 @@ for f in soundfiles:
         cmd = ["julia", "ceesr-vad/ceesr.jl", "segments", argv[1]+f, res_name]
         tasks.append(cmd)
 
-pool = multiprocessing.Pool(None)
+pool = multiprocessing.Pool(10)
 r = pool.map_async(call_algorithm, tasks)
 r.wait()

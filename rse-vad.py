@@ -7,11 +7,11 @@ from scipy import signal, arange
 from sys import argv
 import sigproc as sigutil
 from sklearn.preprocessing import normalize
-import yin
 import librosa
 import vad_eval as vad
 import random
 import speech_processing as speech
+import multiprocessing
 
 try:
     try:
@@ -160,6 +160,13 @@ def write_results(segments, res_name, l):
     f.write("\n".join([str(x) for x in indexes]))
     f.close()
 
+def compute_vad(args):
+    rms, H, rms_t, H_t, rate, fsize, res_name, seconds = args
+    predictions = predict(rms, H, rms_t, H_t)
+    predictions = librosa.core.frames_to_time(predictions, rate, fsize).tolist()
+    print("SoundSense writing: "+res_name)
+    write_results(predictions, res_name, seconds)
+
 if __name__ == "__main__":
     import os
     import matplotlib.pyplot as plt
@@ -175,6 +182,9 @@ if __name__ == "__main__":
         scene = filename[0]
         filename = "tmp/"+filename
     if len(argv) >= 3:
+	tasks = []
+        pool = multiprocessing.Pool(10)
+        args = [(f, argv[2], argv[3]) for f in files]
         for f in os.listdir(argv[2]):
             if os.path.splitext(f)[1] == ".flac":
                 signame = os.path.basename(os.path.splitext(f)[0])
@@ -190,9 +200,15 @@ if __name__ == "__main__":
                 H_min, H_min_smooth = local_min_array(H, 30)
                 rms_t += 0.012
                 H_t = H_min+(H_a*0.2)
-                predictions = predict(rms, H, rms_t, H_t)
-                predictions = librosa.core.frames_to_time(predictions, rate, fsize).tolist()
-                write_results(predictions, res_name, seconds)
+		tasks.append([rms, H, rms_t, H_t, rate, fsize, res_name, seconds])
+                #predictions = predict(rms, H, rms_t, H_t)
+                #predictions = librosa.core.frames_to_time(predictions, rate, fsize).tolist()
+                #write_results(predictions, res_name, seconds)
+        r = pool.map_async(compute_vad, tasks)
+        r.wait()
+	pool.close()
+	pool.join()
+	
     else:
         print(filename)
         frame_ms = 64

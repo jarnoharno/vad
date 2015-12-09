@@ -8,7 +8,7 @@ from sys import argv
 import os
 from scipy.io import wavfile
 import matplotlib
-matplotlib.use("Qt4Agg")
+#matplotlib.use("Qt4Agg")
 import matplotlib.pyplot as plt
 import numpy as np
 
@@ -132,9 +132,11 @@ def main():
             if os.path.splitext(f)[1] == ".flac":
                 files.append(f)
         args = [(f, argv[2], argv[3]) for f in files]
-        pool = multiprocessing.Pool(None)
+        pool = multiprocessing.Pool(10)
         r = pool.map_async(compute_vad, args)
         r.wait()
+        pool.close()
+        pool.join()
         #for a in args:
         #    compute_vad(a)
     else:

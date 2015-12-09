@@ -51,7 +51,7 @@ def resample_data(signalcsv="signals.txt", target="signal8k/", rate=8000):
     for signal in signal_list:
         speech.resample_and_normalize_file(signal, target+os.path.basename(signal), rate)
 
-def main(signalcsv="signals.txt", noisecsv="noise.txt", snrcsv="snr.txt", algocsv="algo.txt", tmppath="tmp/", resultpath="res/", metricspath="eval/"):
+def main(signalcsv="signals.txt", noisecsv="noise.txt", snrcsv="snr.txt", algocsv="algo.txt", tmppath="tmp/", resultpath="res/", metricspath="eval/", clean_temps=False):
     signal_list = readcsv(signalcsv, True)
     noise_list = readcsv(noisecsv)
     snrlist = readcsv(snrcsv)
@@ -59,12 +59,13 @@ def main(signalcsv="signals.txt", noisecsv="noise.txt", snrcsv="snr.txt", algocs
         snrlist = [float(x) for x in snrlist]
     except ValueError:
         print("Failed reading SNR definitions as float-values")
+    pybin = "../bin/python"
     algolist = [
-        ["python", "sos-vad.py"],
-        ["python", "ad-ltsd.py", "batch"],
-        ["python", "ltacs-vad.py", "batch"],
-        ["python", "rse-vad.py", "batch"],
-        ["python", "snac-vad.py", "batch"]
+        #[pybin, "sos-vad.py"],
+        [pybin, "ad-ltsd.py", "batch"],
+        [pybin, "ltacs-vad.py", "batch"],
+        [pybin, "rse-vad.py", "batch"],
+        [pybin, "snac-vad.py", "batch"]
     ]
     print(signal_list)
     for signal in signal_list:
@@ -74,8 +75,9 @@ def main(signalcsv="signals.txt", noisecsv="noise.txt", snrcsv="snr.txt", algocs
         shutil.copyfile("signal8k/"+sig_fn, tmppath+os.path.splitext(sig_fn)[0]+"_clean_40.0.flac")
         call_vads(algolist, tmppath, resultpath)
         evaluation(resultpath, metricspath)
-        for f in os.listdir(tmppath):
-            os.remove(tmppath+f)
+	if clean_temps:
+	    for f in os.listdir(tmppath):
+	        os.remove(tmppath+f)
 
 def evaluation(resultpath="res/", metricspath="eval/"):
     tr = load_truths()
@@ -195,7 +197,7 @@ def call_vads(algorithms, audiopath="tmp/", resultpath="res/"):
     #algorithms = readcsv(algocsv, True)
     for instruction in algorithms:
         print(instruction+[audiopath]+[resultpath])
-        subprocess.call(instruction+[audiopath]+[resultpath])
+        subprocess.check_call(instruction+[audiopath]+[resultpath])
 
 def read_soundfile(filename):
         soundfile = al.Sndfile(filename, 'r')

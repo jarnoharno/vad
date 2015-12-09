@@ -7,7 +7,6 @@ from scipy import signal, arange
 from sys import argv
 import sigproc as sigutil
 from sklearn.preprocessing import normalize
-import yin
 import librosa
 import vad_eval as vad
 import random
@@ -29,9 +28,7 @@ except ImportError:
 def pipeline(path, frame_ms=30, hop_ms=15, filt=True, noisy=True, shift=True, snr=30):
     #sig, rate = librosa.load(path)
     #sig2, rate2 = ad.read_file(path)
-    soundfile = al.Sndfile(path, 'r')
-    rate = soundfile.samplerate
-    sig = soundfile.read_frames(soundfile.nframes)
+    sig, rate = speech.read_soundfile(path)
     sig = signal.wiener(sig)
     fsize = librosa.time_to_samples(float(frame_ms)/1000, rate)[0]
     hop = librosa.time_to_samples(float(hop_ms)/1000, rate)[0]
@@ -322,7 +319,7 @@ if __name__ == "__main__":
             for f in os.listdir(argv[2]):
                 if os.path.splitext(f)[1] == ".flac":
                     files.append(f)
-            pool = multiprocessing.Pool(None)
+            pool = multiprocessing.Pool(10)
             args = [(f, argv[2], argv[3]) for f in files]
             r = pool.map_async(compute_vad, args)
             r.wait()

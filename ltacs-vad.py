@@ -223,10 +223,12 @@ if __name__ == "__main__":
         for f in os.listdir(argv[2]):
             if os.path.splitext(f)[1] == ".flac":
                 files.append(f)
-        pool = multiprocessing.Pool(None)
+        pool = multiprocessing.Pool(10)
         args = [(f, argv[2], argv[3]) for f in files]
         r = pool.map_async(compute_vad, args)
         r.wait()
+	pool.terminate()
+	pool.join()
         #for arg in args:
         #    compute_vad(arg)
     print(argv)

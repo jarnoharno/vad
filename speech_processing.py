@@ -16,7 +16,7 @@ try:
         import audiolab as al
 except ImportError:
     al = None
-    print("Warning: scikits.audiolab not found! Using scipy.io.wavfile")
+    #print("Warning: scikits.audiolab not found! Using scipy.io.wavfile")
     from scipy.io import wavfile
 
 def combine(signal_list, noise_list, snrlist, soundpath="tmp", target_rate=8000, overwrite=False, parallel=True):
@@ -63,17 +63,19 @@ def combine(signal_list, noise_list, snrlist, soundpath="tmp", target_rate=8000,
                 else:
                     print(new_name+" exists, skipping")
                 if parallel:
-                    pool = multiprocessing.Pool(None)
+                    pool = multiprocessing.Pool(4)
                     r = pool.map_async(compute_combination, tasks)
                     r.wait()
+		    pool.terminate()
 
 def compute_combination(args):
     snr, signal, noise, target_rate, new_name = args
     noisy_signal = signal*snrdb2ratio(snr, signal, noise)+noise
     noisy_signal = noisy_signal/peak(noisy_signal)
-    soundfile = al.Sndfile(new_name, 'w', al.Format('flac'), 1, target_rate)
-    soundfile.write_frames(noisy_signal)
-    soundfile.sync()
+    soundfile.write(new_name, noisy_signal, target_rate)
+    #soundfile = al.Sndfile(new_name, 'w', al.Format('flac'), 1, target_rate)
+    #soundfile.write_frames(noisy_signal)
+    #soundfile.sync()
     print("Wrote", new_name)
 
 def add_noise(signal, noisefile, snr=10):
@@ -108,10 +110,11 @@ def resample_and_normalize_file(source, target, new_rate):
     signal, srate = read_soundfile(source)
     if srate != new_rate:
         signal = librosa.core.resample(signal, srate, new_rate)
-    signal = rms_normalize(signal)
-    soundfile = al.Sndfile(target, 'w', al.Format('flac'), 1, new_rate)
-    soundfile.write_frames(signal)
-    soundfile.sync()
+    sig = rms_normalize(signal)
+    sounfile.write(target, sig, new_rate)
+    #soundfile = al.Sndfile(target, 'w', al.Format('flac'), 1, new_rate)
+    #soundfile.write_frames(signal)
+    #soundfile.sync()
 
 #Used in noise approximation algorithms
 def normalize_noises(noisecsv, targetdir="noise8k/", new_rate=8000):
