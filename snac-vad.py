@@ -239,7 +239,7 @@ def compute_vad(args):
     lmin, smoothmin = local_min_array(ltacs)
     lmin = lmin+7
     segments = predict(ltacs, lmin)
-    res_name = resultpath+"/nacc2_"+os.path.basename(os.path.splitext(filename)[0])+".txt"
+    res_name = resultpath+"/snac_"+os.path.basename(os.path.splitext(filename)[0])+".txt"
     write_results(segments, res_name, seconds)
 
 def read_label_list_file(fn):
