@@ -64,7 +64,7 @@ def main(signalcsv="signals.txt", noisecsv="noise.txt", snrcsv="snr.txt", algocs
         #[pybin, "sos-vad.py"],
         [pybin, "ad-ltsd.py", "batch"],
         [pybin, "ltacs-vad.py", "batch"],
-        [pybin, "rse-vad.py", "batch"],
+        [pybin, "rse-vad.py", "batch"] ,
         [pybin, "snac-vad.py", "batch"]
     ]
     print(signal_list)
@@ -74,10 +74,9 @@ def main(signalcsv="signals.txt", noisecsv="noise.txt", snrcsv="snr.txt", algocs
         print(signal, tmppath)
         shutil.copyfile("signal8k/"+sig_fn, tmppath+os.path.splitext(sig_fn)[0]+"_clean_40.0.flac")
         call_vads(algolist, tmppath, resultpath)
-        evaluation(resultpath, metricspath)
-	if clean_temps:
-	    for f in os.listdir(tmppath):
-	        os.remove(tmppath+f)
+        for f in os.listdir(tmppath):
+	    os.remove(tmppath+f)
+    evaluation(resultpath, metricspath)
 
 def evaluation(resultpath="res/", metricspath="eval/"):
     tr = load_truths()

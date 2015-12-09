@@ -8,6 +8,7 @@ import soundfile
 import vad_eval as vad
 import random
 import multiprocessing
+import shutil
 
 try:
     try:
@@ -19,7 +20,7 @@ except ImportError:
     #print("Warning: scikits.audiolab not found! Using scipy.io.wavfile")
     from scipy.io import wavfile
 
-def combine(signal_list, noise_list, snrlist, soundpath="tmp", target_rate=8000, overwrite=False, parallel=True):
+def combine(signal_list, noise_list, snrlist, soundpath="tmp", target_rate=8000, overwrite=False, parallel=True, storage="flacs/"):
     for signal_file, labelfile in signal_list:
         signal, srate = read_soundfile(signal_file)
         if srate != target_rate:
@@ -45,10 +46,11 @@ def combine(signal_list, noise_list, snrlist, soundpath="tmp", target_rate=8000,
                 signal_name = os.path.basename(os.path.splitext(signal_file)[0])
                 noise_name = os.path.basename(os.path.splitext(noise_file)[0])
                 new_name = soundpath+"/"+signal_name+"_"+noise_name+"_"+str(snr)+".flac"
+                storage_name = storage+"/"+signal_name+"_"+noise_name+"_"+str(snr)+".flac"
                 print(new_name)
-                if overwrite or os.path.exists(new_name) == False:
+                if overwrite or os.path.exists(storage_name) == False:
                     print("Combining with SNR", snr)
-                    args = [snr, signal, noise, target_rate, new_name]
+                    args = [snr, signal, noise, target_rate, new_name, storage_name]
                     if parallel:
                         tasks.append(args)
                     else:
@@ -61,18 +63,20 @@ def combine(signal_list, noise_list, snrlist, soundpath="tmp", target_rate=8000,
                         soundfile.sync()
                         """
                 else:
-                    print(new_name+" exists, skipping")
+                    print(storage_name+" exists, skipping")
+		    shutil.copyfile(storage_name, new_name)
                 if parallel:
-                    pool = multiprocessing.Pool(4)
+                    pool = multiprocessing.Pool(6)
                     r = pool.map_async(compute_combination, tasks)
                     r.wait()
 		    pool.terminate()
 
 def compute_combination(args):
-    snr, signal, noise, target_rate, new_name = args
+    snr, signal, noise, target_rate, new_name, storage_name = args
     noisy_signal = signal*snrdb2ratio(snr, signal, noise)+noise
     noisy_signal = noisy_signal/peak(noisy_signal)
-    soundfile.write(new_name, noisy_signal, target_rate)
+    soundfile.write(storage_name, noisy_signal, target_rate)
+    shutil.copyfile(storage_name, new_name)
     #soundfile = al.Sndfile(new_name, 'w', al.Format('flac'), 1, target_rate)
     #soundfile.write_frames(noisy_signal)
     #soundfile.sync()

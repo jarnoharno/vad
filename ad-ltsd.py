@@ -132,7 +132,7 @@ def main():
             if os.path.splitext(f)[1] == ".flac":
                 files.append(f)
         args = [(f, argv[2], argv[3]) for f in files]
-        pool = multiprocessing.Pool(10)
+        pool = multiprocessing.Pool(12)
         r = pool.map_async(compute_vad, args)
         r.wait()
         pool.close()

@@ -7,28 +7,16 @@ from scipy import signal, arange
 from sys import argv
 import sigproc as sigutil
 from sklearn.preprocessing import normalize
-import yin
 import librosa
 import vad_eval as vad
 import multiprocessing
-
-try:
-    try:
-        import scikits.audiolab as al
-    except ImportError:
-        import audiolab as al
-except ImportError:
-    al = None
-    print("Warning: scikits.audiolab not found! Using scipy.io.wavfile")
-    from scipy.io import wavfile
+import soundfile
 
 def pipeline(path, frame_ms=30, hop_ms=15):
     print("load")
     #sig, rate = librosa.load(path)
     #sig2, rate2 = ad.read_file(path)
-    soundfile = al.Sndfile(path, 'r')
-    rate = soundfile.samplerate
-    sig = soundfile.read_frames(soundfile.nframes)
+    sig, rate = soundfile.read(path)
     sig = signal.wiener(sig)
     print("rate", rate)
     fsize = librosa.time_to_samples(float(frame_ms)/1000, rate)[0]
@@ -218,6 +206,10 @@ if __name__ == "__main__":
             plt.plot(np.linspace(0,seconds, len(ltacs)), ltacs)
             plt.plot(np.linspace(0,seconds, len(thresholds)), thresholds)
             plt.show()
+        elif argv[1] == 'print':
+            print(len(ltacs))
+            segments,thresholds = predict(ltacs)
+            print(segments)
     if len(argv) > 3 and argv[1] == 'batch':
         files = []
         for f in os.listdir(argv[2]):

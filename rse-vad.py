@@ -20,7 +20,7 @@ try:
         import audiolab as al
 except ImportError:
     al = None
-    print("Warning: scikits.audiolab not found! Using scipy.io.wavfile")
+    #print("Warning: scikits.audiolab not found! Using scipy.io.wavfile")
     from scipy.io import wavfile
 
 #Relative spectral entropy, using running average for mean spectrum
@@ -161,7 +161,15 @@ def write_results(segments, res_name, l):
     f.close()
 
 def compute_vad(args):
-    rms, H, rms_t, H_t, rate, fsize, res_name, seconds = args
+    filename, res_name, frame_ms = args
+    sig, rate, frames, fsize, rms, H, p = pipeline(filename, frame_ms)
+    seconds = float(len(sig))/rate
+    rms_t, rms_t_smooth = local_min_array(rms)
+    H_a = average(H, 20)
+    H_min, H_min_smooth = local_min_array(H, 30)
+    rms_t += 0.012
+    H_t = H_min+(H_a*0.2)
+    print("SoundSense predicting... "+res_name)
     predictions = predict(rms, H, rms_t, H_t)
     predictions = librosa.core.frames_to_time(predictions, rate, fsize).tolist()
     print("SoundSense writing: "+res_name)
@@ -183,30 +191,22 @@ if __name__ == "__main__":
         filename = "tmp/"+filename
     if len(argv) >= 3:
 	tasks = []
-        pool = multiprocessing.Pool(10)
-        args = [(f, argv[2], argv[3]) for f in files]
+        pool = multiprocessing.Pool(12)
         for f in os.listdir(argv[2]):
             if os.path.splitext(f)[1] == ".flac":
                 signame = os.path.basename(os.path.splitext(f)[0])
                 print(signame)
                 ids = signame.split("_")
-                print(argv[2]+f)
+                filename = argv[2]+f
                 res_name = argv[3]+"/sosens_"+os.path.basename(os.path.splitext(f)[0])+".txt"
                 frame_ms = 64
-                sig, rate, frames, fsize, rms, H, p = pipeline(argv[2]+f, frame_ms)
-                seconds = float(len(sig))/rate
-                rms_t, rms_t_smooth = local_min_array(rms)
-                H_a = average(H, 20)
-                H_min, H_min_smooth = local_min_array(H, 30)
-                rms_t += 0.012
-                H_t = H_min+(H_a*0.2)
-		tasks.append([rms, H, rms_t, H_t, rate, fsize, res_name, seconds])
+		tasks.append([filename, res_name, frame_ms])
                 #predictions = predict(rms, H, rms_t, H_t)
                 #predictions = librosa.core.frames_to_time(predictions, rate, fsize).tolist()
                 #write_results(predictions, res_name, seconds)
         r = pool.map_async(compute_vad, tasks)
         r.wait()
-	pool.close()
+	pool.terminate()
 	pool.join()
 	
     else:
