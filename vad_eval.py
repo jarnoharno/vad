@@ -154,11 +154,12 @@ def read_metrics(metricfn):
         #if not "FN" in m:
         #    m["FN"] = m["D"]+m["F"]+m["US"]+m["UE"]
         try:
-        acc = (m["TP"]+m["TN"])/(m["TP"]+m["TN"]+m["FP"]+m["FN"])
-        recall = m["TP"]/(m["TP"]+m["FN"])
-        fpr = m["FP"]/(m["TP"]+m["FN"])
-        return id, {"algo":info[0], "signal":info[1], "noise":info[2],
-            "snr":float(info[3]), "metrics":m, "ACC":acc, "TPR":recall}
+            acc = (m["TP"]+m["TN"])/(m["TP"]+m["TN"]+m["FP"]+m["FN"])
+            recall = m["TP"]/(m["TP"]+m["FN"])
+            precision = m["TP"]/(m["TP"]+m["FP"])
+            fpr = m["FP"]/(m["TP"]+m["FN"])
+            return id, {"algo":info[0], "signal":info[1], "noise":info[2],
+                "snr":float(info[3]), "metrics":m, "ACC":acc, "TPR":recall, "PPV":precision}
         except KeyError:
             return None
     return None
@@ -177,15 +178,17 @@ def summarize(metricspath="eval/", group=None):
         if snr not in perf:
             perf[snr] = {}
         if m['algo'] not in perf[snr]:
-            perf[snr][m['algo']] = {'acc':float(m['ACC']), 'recall':float(m['TPR']), 'count':1}
+            perf[snr][m['algo']] = {'PPV':float(m['PPV']),'ACC':float(m['ACC']), 'TPR':float(m['TPR']), 'count':1}
         else:
-            perf[snr][m['algo']]['acc'] += float(m['ACC'])
-            perf[snr][m['algo']]['recall'] += float(m['TPR'])
+            perf[snr][m['algo']]['ACC'] += float(m['ACC'])
+            perf[snr][m['algo']]['PPV'] += float(m['PPV'])
+            perf[snr][m['algo']]['TPR'] += float(m['TPR'])
             perf[snr][m['algo']]['count'] += 1
     for snr in perf.keys():
         for k,p in perf[snr].iteritems():
-            p['acc'] = p['acc']/p['count']
-            p['recall'] = p['recall']/p['count']
+            p['ACC'] = p['ACC']/p['count']
+            p['PPV'] = p['PPV']/p['count']
+            p['TPR'] = p['TPR']/p['count']
     return metrics, perf
 
 def plot_accuracy_snr(metrics):

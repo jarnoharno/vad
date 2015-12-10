@@ -208,7 +208,6 @@ if __name__ == "__main__":
         r.wait()
 	pool.terminate()
 	pool.join()
-	
     else:
         print(filename)
         frame_ms = 64

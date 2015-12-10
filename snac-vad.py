@@ -30,7 +30,7 @@ def pipeline(path, frame_ms=30, hop_ms=15, filt=True, noisy=True, shift=True, sn
     #sig, rate = librosa.load(path)
     #sig2, rate2 = ad.read_file(path)
     sig, rate = speech.read_soundfile(path)
-    sig = signal.wiener(sig)
+    #sig = signal.wiener(sig)
     fsize = librosa.time_to_samples(float(frame_ms)/1000, rate)[0]
     hop = librosa.time_to_samples(float(hop_ms)/1000, rate)[0]
     if filt:
@@ -156,22 +156,6 @@ def ac_stat(frame):
     acorr = np.correlate(frames,f,mode='full')
     return acorr[acorr.size/2:]
 
-def predict(signal, threshold=-55, rate=8000, frame_hop=120):
-    ranges = []
-    segment=[]
-    for i in range(0, len(signal)):
-        if threshold_test(signal,threshold,i):
-            if len(segment) == 0 or len(segment) == 1:
-                segment.append(i)
-            elif len(segment) == 2:
-                segment[1] = i
-        else:
-            if len(segment) == 2:
-                ranges.append(segment)
-            segment = []
-    segments = librosa.core.frames_to_time(ranges, rate, frame_hop).tolist()
-    return segments
-
 def write_results(segments, res_name, l):
     indexes = []
     for s in segments:
@@ -229,16 +213,35 @@ def moving_average(x, W_len=320):
 
 def compute_vad(args):
     filename, path, resultpath = args
+    alpha = 0.4
     signame = os.path.basename(os.path.splitext(filename)[0])
     ids = signame.split("_")
     print("computing: "+path+filename)
     sig, rate, frames, fsize, naccs, acvars, ltacs, more = pipeline(path+filename)
     seconds = float(len(sig))/rate
+    average = moving_average(ltacs)
     lmin, smoothmin = local_min_array(ltacs)
-    lmin = lmin+7
-    segments = predict(ltacs, lmin)
+    #lmin = lmin+7
+    threshold = alpha*lmin+(1-alpha)*average
+    segments = predict(ltacs, threshold, average)
     res_name = resultpath+"/snac_"+os.path.basename(os.path.splitext(filename)[0])+".txt"
     write_results(segments, res_name, seconds)
+
+def predict(signal, threshold, alpha=0.4, rate=8000, frame_hop=120):
+    ranges = []
+    segment=[]
+    for i in range(0, len(signal)):
+        if threshold_test(signal,threshold,i):
+            if len(segment) == 0 or len(segment) == 1:
+                segment.append(i)
+            elif len(segment) == 2:
+                segment[1] = i
+        else:
+            if len(segment) == 2:
+                ranges.append(segment)
+            segment = []
+    segments = librosa.core.frames_to_time(ranges, rate, frame_hop).tolist()
+    return segments
 
 def read_label_list_file(fn):
     with open(fn) as f:
@@ -286,12 +289,18 @@ if __name__ == "__main__":
         elif argv[1] == 'ac-feature':
             vad.plot_segments(truths[scene][scene+'i'], 'ti', plt)
             vad.plot_segments(truths[scene][scene+'j'], 'tj', plt)
+            alpha = 0.05
+            beta = 2
+            seconds = float(len(sig))/rate
+            average = moving_average(ltacs)
             lmin, smoothmin = local_min_array(ltacs)
-            lmin = lmin+7
-            vad.plot_segments(predict(ltacs, lmin), 'p', plt)
+            threshold = alpha*lmin+(1-alpha)*average+beta
+            print(alpha, beta)
+            print(threshold)
+            vad.plot_segments(predict(ltacs, threshold), 'p', plt)
             #plt.plot(np.linspace(0,seconds, len(acvars)), acvars)
             plt.plot(np.linspace(0,seconds, len(ltacs)), ltacs)
-            plt.plot(np.linspace(0,seconds, len(lmin)), lmin+2)
+            plt.plot(np.linspace(0,seconds, len(threshold)), lmin+2)
             #plt.plot(np.linspace(0,seconds, len(more[0])), more[0])
             plt.plot(np.linspace(0,seconds, len(more[1])), more[1])
             plt.show()
