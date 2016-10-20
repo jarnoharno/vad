@@ -77,6 +77,7 @@ noisex-92-data := \
 noisex-92-data-url := http://spib.linse.ufsc.br/data/noise/
 
 noisex-92-data-files := $(addprefix $(data-dir)/,$(noisex-92-data))
+noisex-92-raw-files := $(addsuffix .raw,$(basename $(noisex-92-data-files)))
 noisex-92-flac-files := $(addsuffix .flac,$(basename $(noisex-92-data-files)))
 
 .PHONY: all
@@ -91,12 +92,26 @@ $(ceesr-data-merged-files): %.txt: %i.txt %j.txt
 $(noisex-92-data-files): $(data-dir)/%: | $(data-dir)
 	curl -o $@ $(noisex-92-data-url)$(notdir $@)
 
-$(noisex-92-flac-files): %.flac: %.mat
-	$(python) mat2flac.py $(noisex-92-samplerate) $< $@
+$(noisex-92-raw-files): %.raw: %.mat
+	$(python) mat2raw.py $< $@
+
+$(noisex-92-flac-files): %.flac: %.raw
+	ffmpeg -y -f s16le -ar $(noisex-92-samplerate) -ac 1 -i $< $@
 
 .PHONY: clean-noisex-92-flac
 clean-noisex-92-flac:
 	rm -f $(noisex-92-flac-files)
+
+.PHONY: clean-noisex-92-raw
+clean-noisex-92-raw:
+	rm -f $(noisex-92-raw-files)
+
+.PHONY: clean-noisex-92-data
+clean-noisex-92-data:
+	rm -f $(noisex-92-data-files)
+
+.PHONY: clean-noisex-92
+clean-noisex-92: clean-noisex-92-flac clean-noisex-92-raw clean-noisex-92-data
 
 $(data-dir):
 	mkdir $@
